@@ -34,7 +34,7 @@ const YoutubeIcon = ({ size = 24 }: { size?: number }) => (
 );
 import { useI18n } from '@/lib/i18n';
 import { useFFmpeg } from '@/hooks/useFFmpeg';
-import { autoDetectClips } from '@/lib/autoDetect';
+import { autoDetectClips, autoDetectClipsAI } from '@/lib/autoDetect';
 import { Clip, VideoSource, ExportProgress } from '@/lib/types';
 import {
   formatTime,
@@ -67,6 +67,8 @@ export default function HomePage() {
   const [dragOver, setDragOver] = useState(false);
   const [autoDetecting, setAutoDetecting] = useState(false);
   const [autoDetectExpanded, setAutoDetectExpanded] = useState(false);
+  const [autoDetectMode, setAutoDetectMode] = useState<'standard' | 'ai'>('standard');
+  const [hfToken, setHfToken] = useState('');
   const [sensitivity, setSensitivity] = useState(0.5);
   const [exportProgresses, setExportProgresses] = useState<ExportProgress[]>([]);
   const [isExporting, setIsExporting] = useState(false);
@@ -373,7 +375,9 @@ export default function HomePage() {
         ? videoSource.file
         : videoSource.objectUrl || '';
 
-      const result = await autoDetectClips(source, sensitivity);
+      const result = autoDetectMode === 'ai'
+        ? await autoDetectClipsAI(source, hfToken)
+        : await autoDetectClips(source, sensitivity);
 
       if (result.segments.length > 0) {
         const newClips: Clip[] = result.segments.map((seg, i) => ({
@@ -779,18 +783,48 @@ export default function HomePage() {
               {/* Auto-detect panel */}
               {autoDetectExpanded && (
                 <div className="auto-detect-panel">
-                  <div className="auto-detect-sensitivity">
-                    <label>{t('autoDetect.sensitivity')}</label>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.1}
-                      value={sensitivity}
-                      onChange={(e) => setSensitivity(parseFloat(e.target.value))}
-                    />
-                    <span>{Math.round(sensitivity * 100)}%</span>
+                  <div style={{ marginBottom: '12px', display: 'flex', gap: '15px', fontSize: '13px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                      <input type="radio" checked={autoDetectMode === 'standard'} onChange={() => setAutoDetectMode('standard')} /> 
+                      Standard (Fast)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                      <input type="radio" checked={autoDetectMode === 'ai'} onChange={() => setAutoDetectMode('ai')} /> 
+                      AI Emotion (HuggingFace)
+                    </label>
                   </div>
+
+                  {autoDetectMode === 'standard' ? (
+                    <div className="auto-detect-sensitivity">
+                      <label>{t('autoDetect.sensitivity')}</label>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.1}
+                        value={sensitivity}
+                        onChange={(e) => setSensitivity(parseFloat(e.target.value))}
+                      />
+                      <span>{Math.round(sensitivity * 100)}%</span>
+                    </div>
+                  ) : (
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ display: 'block', fontSize: '12px', marginBottom: '6px', color: 'var(--text-muted)' }}>
+                        HuggingFace Token (Optional if server limit reached):
+                      </label>
+                      <input 
+                        type="password" 
+                        value={hfToken} 
+                        onChange={(e) => setHfToken(e.target.value)} 
+                        placeholder="hf_..." 
+                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-glass)', color: 'white', fontSize: '13px' }}
+                      />
+                      <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                        AI will analyze the first 1 minute to find the highest emotional moments.
+                      </p>
+                    </div>
+                  )}
+
                   <button
                     className="btn btn-primary"
                     onClick={handleAutoDetect}

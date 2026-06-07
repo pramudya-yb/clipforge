@@ -11,6 +11,7 @@
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
+    "@huggingface/inference": "^4.13.18",
     "lucide-react": "^1.17.0",
     "next": "^16.2.7",
     "react": "19.2.4",

@@ -1,5 +1,159 @@
 import { AutoDetectResult } from './types';
 
+// Helper to convert AudioBuffer to WAV base64
+async function audioBufferToWavBase64(audioBuffer: AudioBuffer, startSec: number, durationSec: number): Promise<string> {
+  const offlineCtx = new OfflineAudioContext(1, 16000 * durationSec, 16000);
+  const source = offlineCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offlineCtx.destination);
+  source.start(0, startSec, durationSec);
+  
+  const renderedBuffer = await offlineCtx.startRendering();
+  
+  // Convert renderedBuffer to WAV format
+  const length = renderedBuffer.length;
+  const channelData = renderedBuffer.getChannelData(0);
+  const wavBuffer = new ArrayBuffer(44 + length * 2);
+  const view = new DataView(wavBuffer);
+  
+  // Write WAV Header
+  const writeString = (view: DataView, offset: number, string: string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+  
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + length * 2, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true); // 1 channel
+  view.setUint32(24, 16000, true);
+  view.setUint32(28, 16000 * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, length * 2, true);
+  
+  // Write PCM samples
+  let offset = 44;
+  for (let i = 0; i < length; i++) {
+    const s = Math.max(-1, Math.min(1, channelData[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    offset += 2;
+  }
+  
+  // Convert ArrayBuffer to Base64
+  let binary = '';
+  const bytes = new Uint8Array(wavBuffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+/**
+ * Auto-detect moments using Hugging Face AI
+ */
+export async function autoDetectClipsAI(
+  videoSource: File | string,
+  hfToken?: string
+): Promise<AutoDetectResult> {
+  const audioContext = new AudioContext();
+
+  let arrayBuffer: ArrayBuffer;
+  if (typeof videoSource === 'string') {
+    const response = await fetch(videoSource);
+    arrayBuffer = await response.arrayBuffer();
+  } else {
+    arrayBuffer = await videoSource.arrayBuffer();
+  }
+
+  try {
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    const duration = audioBuffer.duration;
+    
+    // Process in 10-second chunks, up to max 6 chunks (1 minute) to avoid API limit
+    const chunkDuration = 10;
+    const maxChunks = 6;
+    const segments: Array<{ start: number; end: number; score: number; label: string }> = [];
+    
+    const chunksToProcess = Math.min(maxChunks, Math.ceil(duration / chunkDuration));
+    
+    for (let i = 0; i < chunksToProcess; i++) {
+      const startSec = i * chunkDuration;
+      const actualDuration = Math.min(chunkDuration, duration - startSec);
+      
+      if (actualDuration < 2) continue; // Skip very short chunks
+      
+      const base64Audio = await audioBufferToWavBase64(audioBuffer, startSec, actualDuration);
+      
+      try {
+        const response = await fetch('/api/ai-detect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audioBase64: base64Audio, customToken: hfToken }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        if (data.result && Array.isArray(data.result)) {
+          // Find score for 'happy', 'surprised', 'excited', or 'angry' (high energy emotions)
+          let emotionScore = 0;
+          const targetEmotions = ['happy', 'surprised', 'angry', 'excited'];
+          
+          for (const item of data.result) {
+            if (targetEmotions.includes(item.label.toLowerCase())) {
+              emotionScore += item.score;
+            }
+          }
+          
+          // If emotion score is high enough, consider it a highlight
+          if (emotionScore > 0.2) {
+            segments.push({
+              start: startSec,
+              end: startSec + actualDuration,
+              score: emotionScore,
+              label: `AI Highlight ${segments.length + 1}`,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('AI chunk processing failed:', err);
+        // Continue to next chunk instead of aborting
+      }
+    }
+    
+    await audioContext.close();
+    
+    // Sort by score
+    segments.sort((a, b) => b.score - a.score);
+    const topSegments = segments.slice(0, 10);
+    topSegments.sort((a, b) => a.start - b.start);
+    
+    topSegments.forEach((seg, i) => {
+      seg.label = `AI Highlight ${i + 1}`;
+    });
+    
+    // Fallback if AI found nothing
+    if (topSegments.length === 0) {
+      return generateEvenSplits(videoSource, 5, 10);
+    }
+    
+    return { segments: topSegments };
+  } catch (err) {
+    console.error('Audio decoding failed in AI mode:', err);
+    await audioContext.close();
+    return generateEvenSplits(videoSource, 5, 10);
+  }
+}
+
 /**
  * Auto-detect potential clip-worthy moments in a video by analyzing audio levels.
  * Uses the Web Audio API to decode audio and find peak energy sections.
