@@ -42,3 +42,5 @@ export interface AutoDetectResult {
 }
 
 export type Language = 'id' | 'en';
+
+export type AIProvider = 'huggingface' | 'groq' | 'gemini';

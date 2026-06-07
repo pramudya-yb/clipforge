@@ -35,7 +35,7 @@ const YoutubeIcon = ({ size = 24 }: { size?: number }) => (
 import { useI18n } from '@/lib/i18n';
 import { useFFmpeg } from '@/hooks/useFFmpeg';
 import { autoDetectClips, autoDetectClipsAI } from '@/lib/autoDetect';
-import { Clip, VideoSource, ExportProgress } from '@/lib/types';
+import { Clip, VideoSource, ExportProgress, AIProvider } from '@/lib/types';
 import {
   formatTime,
   generateId,
@@ -68,8 +68,9 @@ export default function HomePage() {
   const [autoDetecting, setAutoDetecting] = useState(false);
   const [autoDetectExpanded, setAutoDetectExpanded] = useState(false);
   const [autoDetectMode, setAutoDetectMode] = useState<'standard' | 'ai'>('standard');
+  const [aiProvider, setAiProvider] = useState<AIProvider>('huggingface');
   const [hfToken, setHfToken] = useState('');
-  const [serverHasToken, setServerHasToken] = useState<boolean | null>(null);
+  const [serverHasToken, setServerHasToken] = useState<Record<AIProvider, boolean | null>>({ huggingface: null, groq: null, gemini: null });
   const [sensitivity, setSensitivity] = useState(0.5);
   const [exportProgresses, setExportProgresses] = useState<ExportProgress[]>([]);
   const [isExporting, setIsExporting] = useState(false);
@@ -155,12 +156,19 @@ export default function HomePage() {
     }
   }, []);
 
-  // Check if server has HF token configured
+  // Check if server has token configured for the selected AI provider
   useEffect(() => {
-    if (autoDetectMode === 'ai' && serverHasToken === null) {
-      fetch('/api/ai-detect').then((r) => r.json()).then(({ hasToken }) => setServerHasToken(hasToken)).catch(() => setServerHasToken(false));
-    }
-  }, [autoDetectMode, serverHasToken]);
+    if (autoDetectMode !== 'ai' || serverHasToken[aiProvider] !== null) return;
+    const endpoints: Record<AIProvider, string> = {
+      huggingface: '/api/ai-detect',
+      groq: '/api/ai-detect-groq',
+      gemini: '/api/ai-detect-gemini',
+    };
+    fetch(endpoints[aiProvider])
+      .then((r) => r.json())
+      .then(({ hasToken }) => setServerHasToken((prev) => ({ ...prev, [aiProvider]: hasToken })))
+      .catch(() => setServerHasToken((prev) => ({ ...prev, [aiProvider]: false })));
+  }, [autoDetectMode, aiProvider, serverHasToken]);
 
   // Keyboard shortcuts
   useEffect(() => {

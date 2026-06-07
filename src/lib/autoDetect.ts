@@ -1,5 +1,13 @@
 import { AutoDetectResult } from './types';
 
+type AIProvider = 'huggingface' | 'groq' | 'gemini';
+
+const PROVIDER_ENDPOINT: Record<AIProvider, string> = {
+  huggingface: '/api/ai-detect',
+  groq: '/api/ai-detect-groq',
+  gemini: '/api/ai-detect-gemini',
+};
+
 // Helper to convert AudioBuffer to WAV base64
 async function audioBufferToWavBase64(audioBuffer: AudioBuffer, startSec: number, durationSec: number): Promise<string> {
   const offlineCtx = new OfflineAudioContext(1, 16000 * durationSec, 16000);
@@ -56,11 +64,12 @@ async function audioBufferToWavBase64(audioBuffer: AudioBuffer, startSec: number
 }
 
 /**
- * Auto-detect moments using Hugging Face AI
+ * Auto-detect moments using AI (HuggingFace, Groq, or Gemini)
  */
 export async function autoDetectClipsAI(
   videoSource: File | string,
-  hfToken?: string
+  customToken?: string,
+  provider: AIProvider = 'huggingface'
 ): Promise<AutoDetectResult> {
   const audioContext = new AudioContext();
 
@@ -92,10 +101,10 @@ export async function autoDetectClipsAI(
       const base64Audio = await audioBufferToWavBase64(audioBuffer, startSec, actualDuration);
       
       try {
-        const response = await fetch('/api/ai-detect', {
+        const response = await fetch(PROVIDER_ENDPOINT[provider], {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audioBase64: base64Audio, customToken: hfToken }),
+          body: JSON.stringify({ audioBase64: base64Audio, customToken }),
         });
         
         if (!response.ok) {
@@ -104,24 +113,35 @@ export async function autoDetectClipsAI(
         
         const data = await response.json();
         if (data.result && Array.isArray(data.result)) {
-          // Find score for 'happy', 'surprised', 'excited', or 'angry' (high energy emotions)
-          let emotionScore = 0;
-          const targetEmotions = ['happy', 'surprised', 'angry', 'excited'];
-          
-          for (const item of data.result) {
-            if (targetEmotions.includes(item.label.toLowerCase())) {
-              emotionScore += item.score;
+          if (provider === 'groq' || provider === 'gemini') {
+            // Groq/Gemini return {start, end, score, label} directly
+            for (const item of data.result) {
+              if (item.score > 0.2) {
+                segments.push({
+                  start: startSec + (item.start ?? 0),
+                  end: startSec + (item.end ?? actualDuration),
+                  score: item.score,
+                  label: `AI Highlight ${segments.length + 1}`,
+                });
+              }
             }
-          }
-          
-          // If emotion score is high enough, consider it a highlight
-          if (emotionScore > 0.2) {
-            segments.push({
-              start: startSec,
-              end: startSec + actualDuration,
-              score: emotionScore,
-              label: `AI Highlight ${segments.length + 1}`,
-            });
+          } else {
+            // HuggingFace returns [{label, score}] emotion classification
+            let emotionScore = 0;
+            const targetEmotions = ['happy', 'surprised', 'angry', 'excited'];
+            for (const item of data.result) {
+              if (targetEmotions.includes(item.label.toLowerCase())) {
+                emotionScore += item.score;
+              }
+            }
+            if (emotionScore > 0.2) {
+              segments.push({
+                start: startSec,
+                end: startSec + actualDuration,
+                score: emotionScore,
+                label: `AI Highlight ${segments.length + 1}`,
+              });
+            }
           }
         }
       } catch (err) {

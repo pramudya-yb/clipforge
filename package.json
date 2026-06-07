@@ -11,7 +11,9 @@
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
+    "@google/generative-ai": "^0.24.1",
     "@huggingface/inference": "^4.13.18",
+    "groq-sdk": "^0.9.1",
     "lucide-react": "^1.17.0",
     "next": "^16.2.7",
     "react": "19.2.4",
