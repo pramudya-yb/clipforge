@@ -63,12 +63,17 @@ export function useFFmpeg() {
 
       setProgress(0);
 
-      // Clip with stream copy for speed
+      // Crop center to 9:16 aspect ratio and scale to 1080x1920 (Reels/Shorts format)
+      // Note: Re-encoding is required for cropping, which takes longer than stream copy
       await ffmpeg.exec([
         '-i', inputName,
         '-ss', formatFFmpegTime(clip.startTime),
         '-to', formatFFmpegTime(clip.endTime),
-        '-c', 'copy',
+        '-vf', 'crop=ih*9/16:ih,scale=1080:1920',
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', '28', // Good balance of quality and speed
+        '-c:a', 'aac', // Re-encode audio to ensure compatibility
         '-avoid_negative_ts', 'make_zero',
         outputName,
       ]);

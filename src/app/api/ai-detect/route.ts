@@ -19,11 +19,27 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(base64Data, 'base64');
     const blob = new Blob([buffer], { type: 'audio/wav' });
 
-    // Call Audio Classification model for emotion recognition
-    // We use a wav2vec2 model fine-tuned for speech emotion
+    // Gunakan URL Custom Backend jika Anda mengatur CUSTOM_BACKEND_URL di Vercel (contoh: server Python FastAPI Anda sendiri)
+    if (process.env.CUSTOM_BACKEND_URL) {
+      const response = await fetch(process.env.CUSTOM_BACKEND_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ audioBase64 }),
+      });
+      const data = await response.json();
+      return NextResponse.json({ result: data });
+    }
+
+    // Call Audio Classification model
+    // Jika Anda punya HuggingFace Dedicated Endpoint sendiri, isi HF_ENDPOINT_URL di Vercel
+    const modelOrEndpoint = process.env.HF_ENDPOINT_URL || 'ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition';
+
     const result = await hf.audioClassification({
       data: blob,
-      model: 'ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition',
+      model: modelOrEndpoint,
     });
 
     return NextResponse.json({ result });
