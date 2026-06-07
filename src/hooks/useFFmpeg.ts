@@ -8,14 +8,19 @@ import { formatFFmpegTime } from '@/lib/utils';
 
 export function useFFmpeg() {
   const ffmpegRef = useRef<FFmpeg | null>(null);
+  const loadPromiseRef = useRef<Promise<void> | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
 
   const load = useCallback(async () => {
-    if (loaded || loading) return;
+    // If already loaded, return immediately
+    if (ffmpegRef.current && loaded) return;
+    // If load is in progress, wait for it
+    if (loadPromiseRef.current) return loadPromiseRef.current;
+
     setLoading(true);
-    try {
+    loadPromiseRef.current = (async () => {
       const ffmpeg = new FFmpeg();
       ffmpegRef.current = ffmpeg;
 
@@ -31,61 +36,47 @@ export function useFFmpeg() {
       });
 
       setLoaded(true);
+      setLoading(false);
+      loadPromiseRef.current = null;
+    })();
+
+    try {
+      await loadPromiseRef.current;
     } catch (err) {
+      setLoading(false);
+      loadPromiseRef.current = null;
       console.error('Failed to load FFmpeg:', err);
       throw err;
-    } finally {
-      setLoading(false);
     }
-  }, [loaded, loading]);
+  }, [loaded]);
 
   const clipVideo = useCallback(
-    async (
-      videoSource: File | string,
-      clip: Clip
-    ): Promise<string> => {
+    async (videoSource: File | string, clip: Clip, inputName: string): Promise<string> => {
       const ffmpeg = ffmpegRef.current;
       if (!ffmpeg) throw new Error('FFmpeg not loaded');
 
-      const inputName = 'input_video.mp4';
       const outputName = `clip_${clip.id}.mp4`;
-
-      // Write input
-      if (typeof videoSource === 'string') {
-        // It's a blob URL or object URL - fetch it
-        const response = await fetch(videoSource);
-        const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-        await ffmpeg.writeFile(inputName, new Uint8Array(arrayBuffer));
-      } else {
-        await ffmpeg.writeFile(inputName, await fetchFile(videoSource));
-      }
 
       setProgress(0);
 
-      // Crop center to 9:16 aspect ratio and scale to 1080x1920 (Reels/Shorts format)
-      // Note: Re-encoding is required for cropping, which takes longer than stream copy
+      // -ss before -i for fast seeking; -to is relative to -ss when used this way
       await ffmpeg.exec([
-        '-i', inputName,
         '-ss', formatFFmpegTime(clip.startTime),
-        '-to', formatFFmpegTime(clip.endTime),
+        '-i', inputName,
+        '-t', formatFFmpegTime(clip.endTime - clip.startTime),
         '-vf', 'crop=ih*9/16:ih,scale=1080:1920',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
-        '-crf', '28', // Good balance of quality and speed
-        '-c:a', 'aac', // Re-encode audio to ensure compatibility
+        '-crf', '28',
+        '-c:a', 'aac',
         '-avoid_negative_ts', 'make_zero',
         outputName,
       ]);
 
-      // Clean up input first to save memory
-      await ffmpeg.deleteFile(inputName);
-
-      // Read output
       const data = await ffmpeg.readFile(outputName);
       await ffmpeg.deleteFile(outputName);
 
-      const blob = new Blob([data as any], { type: 'video/mp4' });
+      const blob = new Blob([data as unknown as BlobPart], { type: 'video/mp4' });
       return URL.createObjectURL(blob);
     },
     []
@@ -102,8 +93,7 @@ export function useFFmpeg() {
       if (typeof videoSource === 'string') {
         const response = await fetch(videoSource);
         const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-        await ffmpeg.writeFile(inputName, new Uint8Array(arrayBuffer));
+        await ffmpeg.writeFile(inputName, new Uint8Array(await blob.arrayBuffer()));
       } else {
         await ffmpeg.writeFile(inputName, await fetchFile(videoSource));
       }
@@ -121,7 +111,7 @@ export function useFFmpeg() {
       const data = await ffmpeg.readFile(outputName);
       await ffmpeg.deleteFile(outputName);
 
-      const blob = new Blob([data as any], { type: 'image/jpeg' });
+      const blob = new Blob([data as unknown as BlobPart], { type: 'image/jpeg' });
       return URL.createObjectURL(blob);
     },
     []
@@ -133,8 +123,18 @@ export function useFFmpeg() {
       clips: Clip[],
       onProgress: (progresses: ExportProgress[]) => void
     ): Promise<ExportProgress[]> => {
-      if (!ffmpegRef.current) {
-        await load();
+      await load();
+
+      const ffmpeg = ffmpegRef.current!;
+      const inputName = 'input_video.mp4';
+
+      // Write input once for all clips
+      if (typeof videoSource === 'string') {
+        const response = await fetch(videoSource);
+        const blob = await response.blob();
+        await ffmpeg.writeFile(inputName, new Uint8Array(await blob.arrayBuffer()));
+      } else {
+        await ffmpeg.writeFile(inputName, await fetchFile(videoSource));
       }
 
       const results: ExportProgress[] = clips.map((c) => ({
@@ -150,13 +150,8 @@ export function useFFmpeg() {
         onProgress([...results]);
 
         try {
-          const downloadUrl = await clipVideo(videoSource, clips[i]);
-          results[i] = {
-            ...results[i],
-            status: 'done',
-            progress: 100,
-            downloadUrl,
-          };
+          const downloadUrl = await clipVideo(videoSource, clips[i], inputName);
+          results[i] = { ...results[i], status: 'done', progress: 100, downloadUrl };
         } catch (err) {
           results[i] = {
             ...results[i],
@@ -168,25 +163,19 @@ export function useFFmpeg() {
         onProgress([...results]);
       }
 
+      // Clean up input after all clips are processed
+      await ffmpeg.deleteFile(inputName).catch(() => {});
+
       return results;
     },
     [load, clipVideo]
   );
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      // Revoke any object URLs if needed
+      // nothing to clean up; object URLs are managed by the consumer
     };
   }, []);
 
-  return {
-    loaded,
-    loading,
-    progress,
-    load,
-    clipVideo,
-    generateThumbnail,
-    exportClips,
-  };
+  return { loaded, loading, progress, load, clipVideo, generateThumbnail, exportClips };
 }

@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { HfInference } from '@huggingface/inference';
 
+export async function GET() {
+  return NextResponse.json({ hasToken: !!process.env.HF_TOKEN });
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();

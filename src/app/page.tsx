@@ -69,6 +69,7 @@ export default function HomePage() {
   const [autoDetectExpanded, setAutoDetectExpanded] = useState(false);
   const [autoDetectMode, setAutoDetectMode] = useState<'standard' | 'ai'>('standard');
   const [hfToken, setHfToken] = useState('');
+  const [serverHasToken, setServerHasToken] = useState<boolean | null>(null);
   const [sensitivity, setSensitivity] = useState(0.5);
   const [exportProgresses, setExportProgresses] = useState<ExportProgress[]>([]);
   const [isExporting, setIsExporting] = useState(false);
@@ -153,6 +154,13 @@ export default function HomePage() {
       }
     }
   }, []);
+
+  // Check if server has HF token configured
+  useEffect(() => {
+    if (autoDetectMode === 'ai' && serverHasToken === null) {
+      fetch('/api/ai-detect').then((r) => r.json()).then(({ hasToken }) => setServerHasToken(hasToken)).catch(() => setServerHasToken(false));
+    }
+  }, [autoDetectMode, serverHasToken]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -809,16 +817,25 @@ export default function HomePage() {
                     </div>
                   ) : (
                     <div style={{ marginBottom: '12px' }}>
-                      <label style={{ display: 'block', fontSize: '12px', marginBottom: '6px', color: 'var(--text-muted)' }}>
-                        HuggingFace Token (Optional if server limit reached):
-                      </label>
-                      <input 
-                        type="password" 
-                        value={hfToken} 
-                        onChange={(e) => setHfToken(e.target.value)} 
-                        placeholder="hf_..." 
-                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-glass)', color: 'white', fontSize: '13px' }}
-                      />
+                      {serverHasToken === false && (
+                        <>
+                          <label style={{ display: 'block', fontSize: '12px', marginBottom: '6px', color: 'var(--text-muted)' }}>
+                            HuggingFace Token (Optional if server limit reached):
+                          </label>
+                          <input
+                            type="password"
+                            value={hfToken}
+                            onChange={(e) => setHfToken(e.target.value)}
+                            placeholder="hf_..."
+                            style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-glass)', color: 'white', fontSize: '13px' }}
+                          />
+                        </>
+                      )}
+                      {serverHasToken === true && (
+                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                          ✅ HuggingFace token sudah dikonfigurasi di server.
+                        </p>
+                      )}
                       <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
                         AI will analyze the first 1 minute to find the highest emotional moments.
                       </p>
