@@ -428,6 +428,30 @@ export default function HomePage() {
     }
   }, [clips, videoSource, ffmpeg]);
 
+  const handleExportOne = useCallback(async (clip: Clip) => {
+    if (!videoSource) return;
+    const source = videoSource.type === 'file' && videoSource.file ? videoSource.file : videoSource.objectUrl || '';
+
+    setIsExporting(true);
+    try {
+      await ffmpeg.exportClips(source, [clip], (progresses) => {
+        setExportProgresses((prev) => {
+          const merged = [...prev];
+          for (const p of progresses) {
+            const idx = merged.findIndex((x) => x.clipId === p.clipId);
+            if (idx >= 0) merged[idx] = p;
+            else merged.push(p);
+          }
+          return merged;
+        });
+      });
+    } catch (err) {
+      console.error('Export single clip failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [videoSource, ffmpeg]);
+
   const handleDownload = useCallback((url: string, filename: string) => {
     const a = document.createElement('a');
     a.href = url;
@@ -933,6 +957,29 @@ export default function HomePage() {
                           >
                             <Eye size={14} />
                           </button>
+                          {(() => {
+                            const ep = exportProgresses.find((p) => p.clipId === clip.id);
+                            if (ep?.status === 'processing') return <Loader2 size={14} className="spin" />;
+                            if (ep?.status === 'done' && ep.downloadUrl) return (
+                              <button
+                                className="btn btn-icon btn-xs"
+                                onClick={(e) => { e.stopPropagation(); handleDownload(ep.downloadUrl!, `${clip.label}.mp4`); }}
+                                title={t('export.download')}
+                              >
+                                <Download size={14} />
+                              </button>
+                            );
+                            return (
+                              <button
+                                className="btn btn-icon btn-xs"
+                                onClick={(e) => { e.stopPropagation(); handleExportOne(clip); }}
+                                disabled={isExporting}
+                                title="Export clip"
+                              >
+                                <Download size={14} />
+                              </button>
+                            );
+                          })()}
                           <button
                             className="btn btn-icon btn-xs btn-danger"
                             onClick={(e) => {
