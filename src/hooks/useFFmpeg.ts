@@ -80,7 +80,7 @@ export function useFFmpeg() {
       const data = await ffmpeg.readFile(outputName);
       await ffmpeg.deleteFile(outputName);
 
-      const blob = new Blob([(data as Uint8Array).buffer], { type: 'video/mp4' });
+      const blob = new Blob([data as Uint8Array], { type: 'video/mp4' });
       return URL.createObjectURL(blob);
     },
     []
@@ -116,7 +116,7 @@ export function useFFmpeg() {
       const data = await ffmpeg.readFile(outputName);
       await ffmpeg.deleteFile(outputName);
 
-      const blob = new Blob([(data as Uint8Array).buffer], { type: 'image/jpeg' });
+      const blob = new Blob([data as Uint8Array], { type: 'image/jpeg' });
       return URL.createObjectURL(blob);
     },
     []
