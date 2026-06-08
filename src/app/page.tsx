@@ -392,7 +392,7 @@ export default function HomePage() {
         : videoSource.objectUrl || '';
 
       const result = autoDetectMode === 'ai'
-        ? await autoDetectClipsAI(source, hfToken)
+        ? await autoDetectClipsAI(source, hfToken, aiProvider)
         : await autoDetectClips(source, sensitivity);
 
       if (result.segments.length > 0) {
@@ -828,7 +828,7 @@ export default function HomePage() {
                     </label>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
                       <input type="radio" checked={autoDetectMode === 'ai'} onChange={() => setAutoDetectMode('ai')} /> 
-                      AI Emotion (HuggingFace)
+                      AI Smart Detect
                     </label>
                   </div>
 
@@ -847,23 +847,36 @@ export default function HomePage() {
                     </div>
                   ) : (
                     <div style={{ marginBottom: '12px' }}>
-                      {serverHasToken.huggingface === false && (
+                      <label style={{ display: 'block', fontSize: '12px', marginBottom: '6px', color: 'var(--text-muted)' }}>
+                        Pilih AI Provider:
+                      </label>
+                      <select 
+                        value={aiProvider}
+                        onChange={(e) => setAiProvider(e.target.value as AIProvider)}
+                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-glass)', color: 'white', fontSize: '13px', marginBottom: '12px' }}
+                      >
+                        <option value="huggingface">HuggingFace (Gratis, lambat)</option>
+                        <option value="groq">Groq Whisper (Sangat cepat)</option>
+                        <option value="gemini">Google Gemini (Akurat)</option>
+                      </select>
+
+                      {serverHasToken[aiProvider] === false && (
                         <>
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '6px', color: 'var(--text-muted)' }}>
-                            HuggingFace Token (Optional if server limit reached):
+                            {aiProvider === 'huggingface' ? 'HuggingFace Token' : aiProvider === 'groq' ? 'Groq API Key' : 'Gemini API Key'} (Opsional jika limit server habis):
                           </label>
                           <input
                             type="password"
                             value={hfToken}
                             onChange={(e) => setHfToken(e.target.value)}
-                            placeholder="hf_..."
+                            placeholder="Masukkan API Key/Token..."
                             style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg-glass)', color: 'white', fontSize: '13px' }}
                           />
                         </>
                       )}
-                      {serverHasToken.huggingface === true && (
-                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                          ✅ HuggingFace token sudah dikonfigurasi di server.
+                      {serverHasToken[aiProvider] === true && (
+                        <p style={{ fontSize: '12px', color: '#10b981', marginBottom: '6px' }}>
+                          ✅ Token untuk {aiProvider} sudah dikonfigurasi di server.
                         </p>
                       )}
                       <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
