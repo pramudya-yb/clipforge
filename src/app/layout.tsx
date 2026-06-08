@@ -6,11 +6,11 @@ import { ClientProviders } from './providers';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
-  title: 'ClipForge - Free Video Clipper',
+  title: 'ClipForge',
   description:
     'ClipForge is a free online video clipper tool. Cut, trim, and export video clips instantly in your browser. | ClipForge adalah alat pemotong video online gratis. Potong, trim, dan ekspor klip video langsung di browser Anda.',
   openGraph: {
-    title: 'ClipForge - Free Video Clipper',
+    title: 'ClipForge',
     description:
       'Cut, trim, and export video clips instantly in your browser. Free and easy to use.',
     type: 'website',
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'ClipForge - Free Video Clipper',
+    title: 'ClipForge',
     description:
       'Cut, trim, and export video clips instantly in your browser. Free and easy to use.',
   },

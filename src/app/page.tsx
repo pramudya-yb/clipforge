@@ -507,94 +507,98 @@ export default function HomePage() {
         </header>
 
         <main className="upload-screen">
-          <div className="upload-hero">
-            <h1 className="upload-hero-title">
-              <span className="gradient-text">{t('app.title')}</span>
-            </h1>
-            <p className="upload-hero-subtitle">{t('app.subtitle')}</p>
-          </div>
-
-          <div
-            className={`upload-zone ${dragOver ? 'upload-zone--active' : ''}`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*,.mp4,.webm,.mov,.avi,.mkv"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFileSelect(file);
-              }}
-              style={{ display: 'none' }}
-            />
-            <div className="upload-zone-icon">
-              <Upload size={48} strokeWidth={1.5} />
+          <div className="upload-content-left">
+            <div className="upload-hero">
+              <h1 className="upload-hero-title">
+                <span className="gradient-text">{t('app.title')}</span>
+              </h1>
+              <p className="upload-hero-subtitle">{t('app.subtitle')}</p>
             </div>
-            <h2 className="upload-zone-title">{t('upload.title')}</h2>
-            <p className="upload-zone-subtitle">{t('upload.subtitle')}</p>
-            <p className="upload-zone-formats">{t('upload.formats')}</p>
+            
+            <footer className="footer footer--left">
+              <div className="footer-chips">
+                <span className="footer-chip">✨ {t('footer.free')}</span>
+                <span className="footer-chip">🔒 {t('footer.clientside')}</span>
+                <span className="footer-chip">☁️ {t('footer.noupload')}</span>
+              </div>
+              <p className="footer-privacy">{t('footer.privacy')}</p>
+            </footer>
           </div>
 
-          <div className="upload-divider">
-            <span>{t('upload.or')}</span>
-          </div>
-
-          <div className="upload-youtube">
-            <div className="upload-youtube-icon">
-              <YoutubeIcon size={24} />
-            </div>
-            <h3 className="upload-youtube-title">{t('upload.youtube')}</h3>
-            <div className="upload-youtube-input-group">
+          <div className="upload-content-right">
+            <div
+              className={`upload-zone ${dragOver ? 'upload-zone--active' : ''}`}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => fileInputRef.current?.click()}
+            >
               <input
-                type="text"
-                className="upload-youtube-input"
-                placeholder={t('upload.youtube.placeholder')}
-                value={youtubeUrl}
+                ref={fileInputRef}
+                type="file"
+                accept="video/*,.mp4,.webm,.mov,.avi,.mkv"
                 onChange={(e) => {
-                  setYoutubeUrl(e.target.value);
-                  setYoutubeError('');
+                  const file = e.target.files?.[0];
+                  if (file) handleFileSelect(file);
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleYoutubeLoad();
-                }}
-                onClick={(e) => e.stopPropagation()}
+                style={{ display: 'none' }}
               />
-              <button
-                className="btn btn-primary"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleYoutubeLoad();
-                }}
-                disabled={youtubeLoading || !youtubeUrl}
-              >
-                {youtubeLoading ? (
-                  <>
-                    <Loader2 size={16} className="spin" /> {t('upload.youtube.loading')}
-                  </>
-                ) : (
-                  t('upload.youtube.button')
-                )}
-              </button>
+              <div className="upload-zone-icon">
+                <Upload size={48} strokeWidth={1.5} />
+              </div>
+              <h2 className="upload-zone-title">{t('upload.title')}</h2>
+              <p className="upload-zone-subtitle">{t('upload.subtitle')}</p>
+              <p className="upload-zone-formats">{t('upload.formats')}</p>
             </div>
-            {youtubeError && (
-              <p className="upload-youtube-error">
-                <AlertCircle size={14} /> {youtubeError}
-              </p>
-            )}
-          </div>
 
-          <footer className="footer">
-            <div className="footer-chips">
-              <span className="footer-chip">✨ {t('footer.free')}</span>
-              <span className="footer-chip">🔒 {t('footer.clientside')}</span>
-              <span className="footer-chip">☁️ {t('footer.noupload')}</span>
+            <div className="upload-divider">
+              <span>{t('upload.or')}</span>
             </div>
-            <p className="footer-privacy">{t('footer.privacy')}</p>
-          </footer>
+
+            <div className="upload-youtube">
+              <div className="upload-youtube-icon">
+                <YoutubeIcon size={24} />
+              </div>
+              <h3 className="upload-youtube-title">{t('upload.youtube')}</h3>
+              <div className="upload-youtube-input-group">
+                <input
+                  type="text"
+                  className="upload-youtube-input"
+                  placeholder={t('upload.youtube.placeholder')}
+                  value={youtubeUrl}
+                  onChange={(e) => {
+                    setYoutubeUrl(e.target.value);
+                    setYoutubeError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleYoutubeLoad();
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <button
+                  className="btn btn-primary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleYoutubeLoad();
+                  }}
+                  disabled={youtubeLoading || !youtubeUrl}
+                >
+                  {youtubeLoading ? (
+                    <>
+                      <Loader2 size={16} className="spin" /> {t('upload.youtube.loading')}
+                    </>
+                  ) : (
+                    t('upload.youtube.button')
+                  )}
+                </button>
+              </div>
+              {youtubeError && (
+                <p className="upload-youtube-error">
+                  <AlertCircle size={14} /> {youtubeError}
+                </p>
+              )}
+            </div>
+          </div>
         </main>
       </div>
     );
