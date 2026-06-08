@@ -5,6 +5,7 @@ export interface Clip {
   label: string;
   color: string;
   thumbnail?: string;
+  selected?: boolean;
 }
 
 export interface VideoSource {

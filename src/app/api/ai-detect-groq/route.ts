@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     });
 
     // Score each segment by word density + exclamation/question marks (energy proxy)
-    const segments = (transcription.segments ?? []).map((seg: { start: number; end: number; text: string }) => {
+    const segments = ((transcription as any).segments ?? []).map((seg: { start: number; end: number; text: string }) => {
       const text = seg.text.toLowerCase();
       const energyWords = ['amazing', 'incredible', 'wow', 'yes', 'no', 'stop', 'go', 'run', 'help', 'oh', 'wait'];
       const wordScore = energyWords.filter((w) => text.includes(w)).length * 0.15;

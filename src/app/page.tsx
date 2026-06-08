@@ -416,17 +416,15 @@ export default function HomePage() {
   const handleExportAll = useCallback(async () => {
     if (clips.length === 0 || !videoSource) return;
 
+    const clipsToExport = clips.some(c => c.selected) ? clips.filter(c => c.selected) : clips;
+
     setIsExporting(true);
     try {
-      if (!ffmpeg.loaded) {
-        await ffmpeg.load();
-      }
-
       const source = videoSource.type === 'file' && videoSource.file
         ? videoSource.file
         : videoSource.objectUrl || '';
 
-      await ffmpeg.exportClips(source, clips, (progresses) => {
+      await ffmpeg.exportClips(source, clipsToExport, (progresses) => {
         setExportProgresses(progresses);
       });
     } catch (err) {
@@ -849,7 +847,7 @@ export default function HomePage() {
                     </div>
                   ) : (
                     <div style={{ marginBottom: '12px' }}>
-                      {serverHasToken === false && (
+                      {serverHasToken.huggingface === false && (
                         <>
                           <label style={{ display: 'block', fontSize: '12px', marginBottom: '6px', color: 'var(--text-muted)' }}>
                             HuggingFace Token (Optional if server limit reached):
@@ -863,7 +861,7 @@ export default function HomePage() {
                           />
                         </>
                       )}
-                      {serverHasToken === true && (
+                      {serverHasToken.huggingface === true && (
                         <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
                           ✅ HuggingFace token sudah dikonfigurasi di server.
                         </p>
@@ -903,12 +901,24 @@ export default function HomePage() {
             {/* CLIP LIST */}
             <section className="clip-list-section">
               <div className="clip-list">
-                <div className="clip-list-header">
+                <div className="clip-list-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3>
                     <Scissors size={16} />
                     {t('clips.title')}
                     {clips.length > 0 && <span className="badge">{clips.length}</span>}
                   </h3>
+                  {clips.length > 0 && (
+                    <button 
+                      className="btn btn-secondary btn-xs" 
+                      onClick={() => {
+                        const allSelected = clips.every(c => c.selected);
+                        setClips(prev => prev.map(c => ({ ...c, selected: !allSelected })));
+                      }}
+                      style={{ fontSize: '11px', padding: '4px 8px' }}
+                    >
+                      {clips.every(c => c.selected) ? 'Deselect All' : 'Select All'}
+                    </button>
+                  )}
                 </div>
 
                 {clips.length === 0 ? (
@@ -927,9 +937,21 @@ export default function HomePage() {
                           seekTo(clip.startTime);
                         }}
                       >
+                        <div style={{ paddingLeft: '10px', display: 'flex', alignItems: 'center' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={!!clip.selected} 
+                            onChange={(e) => {
+                              setClips(prev => prev.map(c => c.id === clip.id ? { ...c, selected: e.target.checked } : c));
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                            title="Select for export"
+                          />
+                        </div>
                         <div
                           className="clip-card-color"
-                          style={{ backgroundColor: clip.color }}
+                          style={{ backgroundColor: clip.color, marginLeft: '10px' }}
                         />
                         <div className="clip-card-info">
                           <div className="clip-card-label">
@@ -1029,7 +1051,12 @@ export default function HomePage() {
                   ) : (
                     <>
                       <Download size={20} />
-                      <span>{t('export.all')} ({clips.length})</span>
+                      <span>
+                        {clips.some(c => c.selected) 
+                          ? `Export Selected (${clips.filter(c => c.selected).length})`
+                          : `${t('export.all')} (${clips.length})`
+                        }
+                      </span>
                     </>
                   )}
                 </button>
