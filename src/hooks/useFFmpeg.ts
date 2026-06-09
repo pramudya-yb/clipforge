@@ -68,6 +68,7 @@ export function useFFmpeg() {
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-crf', '28',
+        '-threads', '4',
         '-c:a', 'aac',
         '-avoid_negative_ts', 'make_zero',
         outputName,

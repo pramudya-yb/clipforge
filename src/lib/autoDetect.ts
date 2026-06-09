@@ -69,7 +69,8 @@ async function audioBufferToWavBase64(audioBuffer: AudioBuffer, startSec: number
 export async function autoDetectClipsAI(
   videoSource: File | string,
   customToken?: string,
-  provider: AIProvider = 'huggingface'
+  provider: AIProvider = 'huggingface',
+  onProgress?: (progress: number) => void
 ): Promise<AutoDetectResult> {
   const audioContext = new AudioContext();
 
@@ -78,6 +79,9 @@ export async function autoDetectClipsAI(
     const response = await fetch(videoSource);
     arrayBuffer = await response.arrayBuffer();
   } else {
+    if (videoSource.size > 500 * 1024 * 1024) {
+      throw new Error("Ukuran file terlalu besar (>500MB). AI Smart Detect membutuhkan banyak RAM untuk memproses audio dari video sebesar ini dan dapat membuat browser crash. Mohon gunakan video yang lebih kecil atau potong secara manual.");
+    }
     arrayBuffer = await videoSource.arrayBuffer();
   }
 
@@ -85,18 +89,19 @@ export async function autoDetectClipsAI(
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
     const duration = audioBuffer.duration;
     
-    // Process in 10-second chunks, up to max 6 chunks (1 minute) to avoid API limit
+    // Process in 10-second chunks for the entire video duration
     const chunkDuration = 10;
-    const maxChunks = 6;
     const segments: Array<{ start: number; end: number; score: number; label: string }> = [];
-    
-    const chunksToProcess = Math.min(maxChunks, Math.ceil(duration / chunkDuration));
-    
-    for (let i = 0; i < chunksToProcess; i++) {
+    const chunksToProcess = Math.ceil(duration / chunkDuration);
+    let completedChunks = 0;
+
+    const processChunk = async (i: number, retries = 3) => {
       const startSec = i * chunkDuration;
       const actualDuration = Math.min(chunkDuration, duration - startSec);
       
-      if (actualDuration < 2) continue; // Skip very short chunks
+      if (actualDuration < 2) {
+        return;
+      }
       
       const base64Audio = await audioBufferToWavBase64(audioBuffer, startSec, actualDuration);
       
@@ -108,6 +113,11 @@ export async function autoDetectClipsAI(
         });
         
         if (!response.ok) {
+          if (response.status === 429 && retries > 0) {
+            // Exponential backoff
+            await new Promise((res) => setTimeout(res, 2000 * (4 - retries)));
+            return processChunk(i, retries - 1);
+          }
           throw new Error(`API Error: ${response.statusText}`);
         }
         
@@ -121,7 +131,7 @@ export async function autoDetectClipsAI(
                   start: startSec + (item.start ?? 0),
                   end: startSec + (item.end ?? actualDuration),
                   score: item.score,
-                  label: `AI Highlight ${segments.length + 1}`,
+                  label: `AI Highlight`,
                 });
               }
             }
@@ -139,7 +149,7 @@ export async function autoDetectClipsAI(
                 start: startSec,
                 end: startSec + actualDuration,
                 score: emotionScore,
-                label: `AI Highlight ${segments.length + 1}`,
+                label: `AI Highlight`,
               });
             }
           }
@@ -148,7 +158,32 @@ export async function autoDetectClipsAI(
         console.error('AI chunk processing failed:', err);
         // Continue to next chunk instead of aborting
       }
+    };
+
+    // Fix for the finally block above: wrapper to handle increments cleanly
+    const safeProcessChunk = async (i: number) => {
+      await processChunk(i, 3);
+      completedChunks++;
+      if (onProgress) onProgress(Math.round((completedChunks / chunksToProcess) * 100));
+    };
+
+    // Parallel execution with concurrency limit
+    const CONCURRENCY = 4;
+    let currentIndex = 0;
+
+    const executeBatch = async () => {
+      while (currentIndex < chunksToProcess) {
+        const index = currentIndex++;
+        await safeProcessChunk(index);
+      }
+    };
+
+    const workers = [];
+    for (let w = 0; w < CONCURRENCY; w++) {
+      workers.push(executeBatch());
     }
+
+    await Promise.all(workers);
     
     await audioContext.close();
     

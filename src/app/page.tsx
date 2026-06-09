@@ -61,11 +61,9 @@ export default function HomePage() {
   const [dragTarget, setDragTarget] = useState<{ clipId: string; edge: 'start' | 'end' } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [, setScrollLeft] = useState(0);
-  const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [youtubeLoading, setYoutubeLoading] = useState(false);
-  const [youtubeError, setYoutubeError] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [autoDetecting, setAutoDetecting] = useState(false);
+  const [aiProgress, setAiProgress] = useState<number | null>(null);
   const [autoDetectExpanded, setAutoDetectExpanded] = useState(false);
   const [autoDetectMode, setAutoDetectMode] = useState<'standard' | 'ai'>('standard');
   const [aiProvider, setAiProvider] = useState<AIProvider>('huggingface');
@@ -210,12 +208,17 @@ export default function HomePage() {
       return;
     }
     const objectUrl = URL.createObjectURL(file);
-    setVideoSource({
-      type: 'file',
-      file,
-      objectUrl,
-      title: file.name,
-      duration: 0,
+    setVideoSource((prev) => {
+      if (prev?.objectUrl && prev.type === 'file') {
+        URL.revokeObjectURL(prev.objectUrl);
+      }
+      return {
+        type: 'file',
+        file,
+        objectUrl,
+        title: file.name,
+        duration: 0,
+      };
     });
     setClips([]);
     setExportProgresses([]);
@@ -240,44 +243,6 @@ export default function HomePage() {
     setDragOver(false);
   }, []);
 
-  // === YOUTUBE ===
-  const handleYoutubeLoad = useCallback(async () => {
-    const videoId = parseYouTubeUrl(youtubeUrl);
-    if (!videoId) {
-      setYoutubeError(t('upload.youtube.error'));
-      return;
-    }
-
-    setYoutubeLoading(true);
-    setYoutubeError('');
-
-    try {
-      const res = await fetch(`/api/youtube/info?url=${encodeURIComponent(youtubeUrl)}`);
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to load video');
-      }
-
-      // For YouTube, we use a proxy approach or embed
-      // Since direct download requires server-side tools, we'll inform the user
-      // to download the video first and upload it, or use the embed for preview
-      setVideoSource({
-        type: 'youtube',
-        url: youtubeUrl,
-        title: data.title,
-        thumbnail: data.thumbnail,
-        duration: 0,
-        objectUrl: data.embedUrl,
-      });
-      setClips([]);
-      setExportProgresses([]);
-    } catch {
-      setYoutubeError(t('upload.youtube.error'));
-    } finally {
-      setYoutubeLoading(false);
-    }
-  }, [youtubeUrl, t]);
 
   // === CLIPS MANAGEMENT ===
   const addClip = useCallback(() => {
@@ -298,10 +263,16 @@ export default function HomePage() {
     setActiveClipId(newClip.id);
   }, [currentTime, duration, clips.length]);
 
-  const deleteClip = useCallback((id: string) => {
+  const removeClip = useCallback((id: string) => {
+    // Attempt to revoke URL if there's a processed export
+    exportProgresses.forEach((ep) => {
+      if (ep.clipId === id && ep.downloadUrl) {
+        URL.revokeObjectURL(ep.downloadUrl);
+      }
+    });
     setClips((prev) => prev.filter((c) => c.id !== id));
     if (activeClipId === id) setActiveClipId(null);
-  }, [activeClipId]);
+  }, [activeClipId, exportProgresses]);
 
   const previewClip = useCallback(
     (clip: Clip) => {
@@ -391,8 +362,9 @@ export default function HomePage() {
         ? videoSource.file
         : videoSource.objectUrl || '';
 
+      setAiProgress(0);
       const result = autoDetectMode === 'ai'
-        ? await autoDetectClipsAI(source, hfToken, aiProvider)
+        ? await autoDetectClipsAI(source, hfToken, aiProvider, (p) => setAiProgress(p))
         : await autoDetectClips(source, sensitivity);
 
       if (result.segments.length > 0) {
@@ -407,8 +379,10 @@ export default function HomePage() {
       }
     } catch (err) {
       console.error('Auto-detect failed:', err);
+      alert('Deteksi gagal: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setAutoDetecting(false);
+      setAiProgress(null);
     }
   }, [videoSource, sensitivity, clips.length]);
 
@@ -549,54 +523,6 @@ export default function HomePage() {
               <h2 className="upload-zone-title">{t('upload.title')}</h2>
               <p className="upload-zone-subtitle">{t('upload.subtitle')}</p>
               <p className="upload-zone-formats">{t('upload.formats')}</p>
-            </div>
-
-            <div className="upload-divider">
-              <span>{t('upload.or')}</span>
-            </div>
-
-            <div className="upload-youtube">
-              <div className="upload-youtube-icon">
-                <YoutubeIcon size={24} />
-              </div>
-              <h3 className="upload-youtube-title">{t('upload.youtube')}</h3>
-              <div className="upload-youtube-input-group">
-                <input
-                  type="text"
-                  className="upload-youtube-input"
-                  placeholder={t('upload.youtube.placeholder')}
-                  value={youtubeUrl}
-                  onChange={(e) => {
-                    setYoutubeUrl(e.target.value);
-                    setYoutubeError('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleYoutubeLoad();
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <button
-                  className="btn btn-primary"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleYoutubeLoad();
-                  }}
-                  disabled={youtubeLoading || !youtubeUrl}
-                >
-                  {youtubeLoading ? (
-                    <>
-                      <Loader2 size={16} className="spin" /> {t('upload.youtube.loading')}
-                    </>
-                  ) : (
-                    t('upload.youtube.button')
-                  )}
-                </button>
-              </div>
-              {youtubeError && (
-                <p className="upload-youtube-error">
-                  <AlertCircle size={14} /> {youtubeError}
-                </p>
-              )}
             </div>
           </div>
         </main>
@@ -789,7 +715,7 @@ export default function HomePage() {
                         className="clip-region-delete"
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteClip(clip.id);
+                          removeClip(clip.id);
                         }}
                       >
                         <X size={10} />
@@ -884,7 +810,7 @@ export default function HomePage() {
                         </p>
                       )}
                       <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
-                        AI will analyze the first 1 minute to find the highest emotional moments.
+                        AI will analyze the entire video to find the highest emotional moments.
                       </p>
                     </div>
                   )}
@@ -892,12 +818,12 @@ export default function HomePage() {
                   <button
                     className="btn btn-primary"
                     onClick={handleAutoDetect}
-                    disabled={autoDetecting}
+                    disabled={autoDetecting || (autoDetectMode === 'ai' && aiProvider === 'huggingface' && !hfToken && serverHasToken.huggingface === false) || duration === 0}
                   >
                     {autoDetecting ? (
                       <>
                         <Loader2 size={16} className="spin" />
-                        <span>{t('autoDetect.analyzing')}</span>
+                        {aiProgress !== null ? ` ${t('autoDetect.analyzing')} ${aiProgress}%` : ` ${t('autoDetect.analyzing')}`}
                       </>
                     ) : (
                       <>
@@ -1031,7 +957,7 @@ export default function HomePage() {
                             className="btn btn-icon btn-xs btn-danger"
                             onClick={(e) => {
                               e.stopPropagation();
-                              deleteClip(clip.id);
+                              removeClip(clip.id);
                             }}
                             title={t('clips.delete')}
                           >
